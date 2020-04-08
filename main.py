@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import torchviz
+from torch.autograd import Variable
 import torch_geometric.nn as pyg_nn
 import torch_geometric.utils as pyg_utils
 
@@ -22,6 +23,10 @@ import torch_geometric.transforms as T
 from tensorboardX import SummaryWriter
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+from torch_geometric.datasets import CitationFull
+from tqdm import tqdm
+#import pdb
+
 
 
 class GNNStack(nn.Module):
@@ -134,9 +139,9 @@ def train(dataset, task, writer):
             opt.zero_grad()
             embedding, pred = model(batch)
             label = batch.y
-            if task == 'node':
-                pred = pred[batch.train_mask]
-                label = label[batch.train_mask]
+            # if task == 'node':
+            #     pred = pred[batch.train_mask]
+            #     label = label[batch.train_mask]
             loss = model.loss(pred, label)
             loss.backward()
             opt.step()
@@ -163,11 +168,11 @@ def test(loader, model, is_validation=False):
             pred = pred.argmax(dim=1)
             label = data.y
 
-        if model.task == 'node':
-            mask = data.val_mask if is_validation else data.test_mask
-            # node classification: only evaluate on nodes in test set
-            pred = pred[mask]
-            label = data.y[mask]
+        # if model.task == 'node':
+        #     mask = data.val_mask if is_validation else data.test_mask
+        #     # node classification: only evaluate on nodes in test set
+        #     pred = pred[mask]
+        #     label = data.y[mask]
 
         correct += pred.eq(label).sum().item()
 
@@ -176,33 +181,59 @@ def test(loader, model, is_validation=False):
     else:
         total = 0
         for data in loader.dataset:
-            total += torch.sum(data.test_mask).item()
+            total += len(data.y)
+            #total += torch.sum(data.test_mask).item()
     return correct / total
 
 
-writer = SummaryWriter("./log/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
 
-dataset = Planetoid(root='/tmp/cora', name='cora')
-task = 'node'
+data_cora = Planetoid(root='/tmp/cora', name='cora')
+data_citeseer = Planetoid(root='/tmp/citeseer', name='citeseer')
 
-model = train(dataset, task, writer)
+all_dataset =[data_cora, data_citeseer]
+all_dataset_name = ['cora', 'citeseer']
 
+for i, j in tqdm(zip(all_dataset, all_dataset_name)):
+    writer = SummaryWriter("./log_" + j + '/' + datetime.now().strftime("%Y%m%d-%H%M%S"))
+    dataset = i.shuffle()
+    task = 'node'
+    model = train(dataset, task, writer)
 
-color_list = ["red", "orange", "green", "blue", "purple", "brown"]
-
+# plot model structure
 loader = DataLoader(dataset, batch_size=64, shuffle=True)
-embs = []
-colors = []
-for batch in loader:
-    print(batch)
-# for batch in loader:
-#     emb, pred = model(batch)
-#     embs.append(emb)
-#     colors += [color_list[y] for y in batch.y]
-embs = torch.cat(embs, dim=0)
+plot_model = GNNStack(max(dataset.num_node_features, 1), 32, dataset.num_classes, task=task)
 
-xs, ys = zip(*TSNE().fit_transform(embs.detach().numpy()))
-plt.scatter(xs, ys, color=colors)
+
+for batch in loader:
+    y = plot_model(batch)
+    graph = torchviz.make_dot(y, params=dict(plot_model.named_parameters()))
+    graph.view()
+    break
+
+
+
+
+# writer = SummaryWriter("./log/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+#
+# dataset = Planetoid(root='/tmp/cora', name='cora')
+# task = 'node'
+#
+# model = train(dataset, task, writer)
+#
+#
+# color_list = ["red", "orange", "green", "blue", "purple", "brown"]
+#
+# loader = DataLoader(dataset, batch_size=64, shuffle=True)
+# embs = []
+# colors = []
+# # for batch in loader:
+# #     emb, pred = model(batch)
+# #     embs.append(emb)
+# #     colors += [color_list[y] for y in batch.y]
+# embs = torch.cat(embs, dim=0)
+#
+# xs, ys = zip(*TSNE().fit_transform(embs.detach().numpy()))
+# plt.scatter(xs, ys, color=colors)
 
 
 # class Encoder(torch.nn.Module):
