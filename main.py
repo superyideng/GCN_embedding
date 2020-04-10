@@ -186,7 +186,6 @@ def test(loader, model, is_validation=False):
     return correct / total
 
 
-
 data_cora = Planetoid(root='/tmp/cora', name='cora')
 data_citeseer = Planetoid(root='/tmp/citeseer', name='citeseer')
 
@@ -210,7 +209,23 @@ for batch in loader:
     graph.view()
     break
 
+# embedding visualization
+# dataset: citeseer
+writer = SummaryWriter("./log" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+model = train(data_citeseer, 'node', writer)
+color_list = ["red", "orange", "green", "blue", "purple", "brown"]
+loader = DataLoader(data_citeseer, batch_size=64, shuffle=True)
+embs = []
+colors = []
+for batch in loader:
+    emb, pred = model(batch)
+    embs.append(emb)
+    colors += [color_list[y] for y in batch.y]
+embs = torch.cat(embs, dim=0)
 
+xs, ys = zip(*TSNE().fit_transform(embs.detach().numpy()))
+plt.scatter(xs, ys, color=colors)
+plt.savefig("emb_citeseer.jpg")
 
 
 # writer = SummaryWriter("./log/" + datetime.now().strftime("%Y%m%d-%H%M%S"))
